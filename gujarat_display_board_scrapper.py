@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 # ==================== CONFIGURATION ====================
 URL = "https://gujarathighcourt.nic.in/boarddisplay"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\gujarat_hc_excels"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\gujarat_hc_excels"
 EXCEL_FILE = "GujaratHC_DisplayBoard_Data.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================

@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 # ==================== CONFIGURATION ====================
 URL = "https://highcourt.cg.gov.in/hcbspcourtview/court1.php"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\db_excels"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\chattisgarh_hc_excel"
 EXCEL_FILE = "Chattisgarh_HighCourt_DisplayBoard_Data.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================

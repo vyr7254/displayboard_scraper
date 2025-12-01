@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 # ==================== CONFIGURATION ====================
 URL = "https://judiciary.karnataka.gov.in/display_board_bench.php"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\db_excels"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\karnataka_hc_excel\bengaluru_bench"
 EXCEL_FILE = "banglore_bench_DisplayBoard_Data.xlsx"
 
 
