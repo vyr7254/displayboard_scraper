@@ -18,8 +18,8 @@ from bs4 import BeautifulSoup
 
 # ==================== CONFIGURATION ====================
 URL = "https://wdb.sci.gov.in/display_original.php"
-SCRAPE_INTERVAL = 60  # seconds (set to 60 as per requirement)
-BASE_FOLDER = r"C:\Users\Dell\OneDrive\Desktop\sc_script_for_download_and_extraction\scexcel"
+SCRAPE_INTERVAL = 30  # seconds (set to 60 as per requirement)
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\db_excels"
 EXCEL_FILE = "SC_DisplayBoard_Data.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================
@@ -28,14 +28,19 @@ def setup_driver():
     """
     Initialize Chrome driver with VISIBLE browser
     """
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+    
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36")
     
-    driver = webdriver.Chrome(options=chrome_options)
+    # Use webdriver-manager for automatic driver management
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.implicitly_wait(10)
     return driver
 

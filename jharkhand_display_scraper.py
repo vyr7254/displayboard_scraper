@@ -1,3 +1,8 @@
+"""
+Jharkhand High Court Display Board Scraper
+Extracts court data from JHC display board and saves to Excel
+"""
+
 import time
 import os
 import re
@@ -12,11 +17,12 @@ import platform
 from bs4 import BeautifulSoup
 
 # ==================== CONFIGURATION ====================
-URL = "https://judiciary.karnataka.gov.in/display_board_bench.php"
-SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\db_excels"
-EXCEL_FILE = "banglore_bench_DisplayBoard_Data.xlsx"
+URL = "https://jharkhandhighcourt.nic.in/dpboard.php"
+SCRAPE_INTERVAL = 30  # seconds (adjust as needed)
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\jhc_excels"
+EXCEL_FILE = "JHC_DisplayBoard_Data.xlsx"
 
+# ==================== SETUP FUNCTIONS ====================
 
 def setup_driver():
     """
@@ -89,10 +95,8 @@ def extract_cell_text(cell):
 
 def scrape_display_board(driver):
     """
-    Scrape courts from Karnataka High Court display board - BANGALORE BENCH ONLY
-    Extracts ONLY the first 2 data tables (courts 1-40)
-    Extracts ALL rows including "No Session", "No Sitting", empty courts
-    Columns: CH No. | List No. | Sl. No. | Case No. | Stage
+    Scrape courts from Jharkhand High Court display board
+    Each row = 1 court with 4 columns: Court | Sl.No. | Case No. | Status
     """
     try:
         print("   → Loading display board page...")
@@ -102,13 +106,13 @@ def scrape_display_board(driver):
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.TAG_NAME, "table"))
         )
-        time.sleep(5)  # Extra wait for dynamic content
+        time.sleep(3)  # Extra wait for dynamic content
         
         # Get current timestamp
         scrape_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         print("\n" + "="*100)
-        print("ANALYZING PAGE STRUCTURE - EXTRACTING BANGALORE BENCH COURTS (1-40)...")
+        print("ANALYZING PAGE STRUCTURE - EXTRACTING ALL COURTS...")
         print("="*100)
         
         # Find all tables
@@ -117,117 +121,99 @@ def scrape_display_board(driver):
         
         all_courts_data = []
         
-        # Analyze each table to find data tables (those with "CH No." header)
-        data_tables = []
-        for idx, table in enumerate(tables):
-            try:
-                # Check if this table has the court data headers
-                rows = table.find_elements(By.TAG_NAME, "tr")
-                if not rows:
-                    continue
-                    
-                header_row = rows[0]
-                header_cells = header_row.find_elements(By.TAG_NAME, "th")
-                if not header_cells:
-                    header_cells = header_row.find_elements(By.TAG_NAME, "td")
-                
-                header_text = " ".join([extract_cell_text(cell) for cell in header_cells])
-                
-                # Check if this is a data table (contains "CH No.")
-                if "CH No." in header_text or "CH No" in header_text:
-                    data_tables.append((idx, table))
-                    print(f"   ✓ Found data table #{len(data_tables)} at index {idx}")
-                    
-                    # ONLY take the first 2 data tables (Bangalore Bench)
-                    if len(data_tables) == 2:
-                        break
-            except:
-                continue
-        
-        print(f"   → Processing first 2 data tables (Bangalore Bench)")
-        
-        # Process ONLY the first 2 data tables (courts 1-40)
-        for table_num, (table_idx, table) in enumerate(data_tables[:2], 1):
+        # Process each table (display board has multiple tables)
+        for table_idx, table in enumerate(tables, 1):
             print(f"\n{'─'*100}")
-            print(f"PROCESSING BANGALORE BENCH TABLE {table_num} (Table Index: {table_idx})")
+            print(f"PROCESSING TABLE {table_idx}:")
             print(f"{'─'*100}")
             
             rows = table.find_elements(By.TAG_NAME, "tr")
-            print(f"   → Found {len(rows)} total rows in Table {table_num}")
+            print(f"   → Found {len(rows)} rows in table {table_idx}")
             
-            # Check headers
+            # Check if this is a data table (skip header-only tables)
+            if len(rows) <= 1:
+                print(f"   → Skipping table {table_idx} (header only)")
+                continue
+            
+            # Check headers (first row)
             if len(rows) > 0:
-                print(f"\n   HEADER ROW:")
                 header_cells = rows[0].find_elements(By.TAG_NAME, "th")
                 if not header_cells:
                     header_cells = rows[0].find_elements(By.TAG_NAME, "td")
                 
+                print(f"\n   HEADER ROW:")
                 for idx, cell in enumerate(header_cells):
                     header_text = extract_cell_text(cell)
                     print(f"      Header[{idx}]: '{header_text}'")
             
-            print(f"\n   EXTRACTING DATA FROM ALL ROWS (INCLUDING NO SESSION/NO SITTING):")
-            
-            # Process each row (skip header row) - EXTRACT ALL ROWS
+            # Process data rows (skip header row)
             for row_idx, row in enumerate(rows[1:], 1):
                 try:
                     cells = row.find_elements(By.TAG_NAME, "td")
                     
-                    # Each row should have 5 columns
-                    if len(cells) >= 5:
-                        # Extract data from each column
-                        ch_no = extract_cell_text(cells[0])
-                        list_no = extract_cell_text(cells[1])
-                        sl_no = extract_cell_text(cells[2])
-                        case_no = extract_cell_text(cells[3])
-                        stage = extract_cell_text(cells[4])
-                        
-                        # ALWAYS EXTRACT - NO SKIPPING
-                        print(f"\n      ROW {row_idx} (Court {ch_no}):")
-                        print(f"         CH No: '{ch_no}'")
-                        print(f"         List No: '{list_no}'")
-                        print(f"         Sl. No: '{sl_no}'")
-                        print(f"         Case No: '{case_no}'")
-                        print(f"         Stage: '{stage}'")
-                        
-                        # Create court data dictionary - EXTRACT EVERYTHING
-                        court_data = {
-                            "CH No": ch_no if ch_no else "",
-                            "List No": list_no if list_no else "",
-                            "Sl. No": sl_no if sl_no else "",
-                            "Case No": case_no if case_no else "",
-                            "Stage": stage if stage else "",
-                            "DateTime": scrape_time
-                        }
-                        
-                        all_courts_data.append(court_data)
-                        print(f"         ✓ EXTRACTED")
+                    # Check if row has enough cells
+                    if len(cells) < 2:
+                        continue
+                    
+                    # Extract Court Number (Column 1)
+                    court_no = extract_cell_text(cells[0])
+                    
+                    # Check if this is a "Not in session" row
+                    # These rows typically have fewer cells or specific text
+                    if len(cells) == 2:
+                        # This is a "Not in session" row (Court + Status only)
+                        sl_no = ""
+                        case_no = ""
+                        status = extract_cell_text(cells[1])
+                    elif len(cells) >= 4:
+                        # Normal row with all 4 columns: Court | Sl.No. | Case No. | Status
+                        sl_no = extract_cell_text(cells[1])
+                        case_no = extract_cell_text(cells[2])
+                        status = extract_cell_text(cells[3])
                     else:
-                        print(f"      Row {row_idx}: Warning - only {len(cells)} cells found (expected 5)")
-                        
+                        # Skip malformed rows
+                        print(f"\n   ROW {row_idx}: Skipped (unexpected cell count: {len(cells)})")
+                        continue
+                    
+                    # Skip empty rows
+                    if not court_no:
+                        continue
+                    
+                    print(f"\n   ROW {row_idx} (Court {court_no}):")
+                    print(f"      Court: '{court_no}'")
+                    print(f"      Sl.No.: '{sl_no}'")
+                    print(f"      Case No.: '{case_no}'")
+                    print(f"      Status: '{status}'")
+                    
+                    # Create court data dictionary
+                    court_data = {
+                        "Court": court_no if court_no else "",
+                        "Sl.No.": sl_no if sl_no else "",
+                        "Case No.": case_no if case_no else "",
+                        "Status": status if status else "",
+                        "DateTime": scrape_time
+                    }
+                    
+                    all_courts_data.append(court_data)
+                    print(f"      ✓ EXTRACTED")
+                    
                 except Exception as e:
-                    print(f"      ✗ Error processing row {row_idx}: {str(e)}")
+                    print(f"\n   ✗ Error processing row {row_idx}: {str(e)}")
                     continue
         
         print(f"\n{'='*100}")
         print(f"EXTRACTION SUMMARY:")
         print(f"{'='*100}")
         print(f"   ✓ Total courts extracted: {len(all_courts_data)}")
-        print(f"   ✓ Expected: 40 courts (20 per table)")
         print(f"   ✓ Timestamp: {scrape_time}")
         
         if all_courts_data:
-            print(f"\n   First 5 extracted courts:")
-            sample_size = min(5, len(all_courts_data))
-            for i, court in enumerate(all_courts_data[:sample_size], 1):
-                status = court['Case No'] if court['Case No'] else "EMPTY"
-                print(f"      {i}. CH {court['CH No']} | List {court['List No']} | Sl {court['Sl. No']} | {status} | Stage: {court['Stage']}")
-            
-            if len(all_courts_data) > 10:
-                print(f"\n   Last 5 extracted courts:")
-                for i, court in enumerate(all_courts_data[-5:], len(all_courts_data)-4):
-                    status = court['Case No'] if court['Case No'] else "EMPTY"
-                    print(f"      {i}. CH {court['CH No']} | List {court['List No']} | Sl {court['Sl. No']} | {status} | Stage: {court['Stage']}")
+            print(f"\n   Sample extracted data:")
+            for i, court in enumerate(all_courts_data[:5], 1):
+                if court['Case No.']:
+                    print(f"      {i}. Court {court['Court']} | Sl.No. {court['Sl.No.']} | {court['Case No.']} | {court['Status']}")
+                else:
+                    print(f"      {i}. Court {court['Court']} | {court['Status']}")
         
         print(f"{'='*100}\n")
         
@@ -255,7 +241,7 @@ def save_to_excel(data, file_path, open_file=False):
         df = pd.DataFrame(data)
         
         # Ensure column order
-        df = df[["CH No", "List No", "Sl. No", "Case No", "Stage", "DateTime"]]
+        df = df[["Court", "Sl.No.", "Case No.", "Status", "DateTime"]]
         
         # Check if file exists
         if os.path.exists(file_path):
@@ -298,12 +284,11 @@ def main():
     Main execution
     """
     print("=" * 100)
-    print(" " * 25 + "KARNATAKA HIGH COURT - BANGALORE BENCH DISPLAY BOARD SCRAPER")
+    print(" " * 30 + "JHARKHAND HIGH COURT DISPLAY BOARD SCRAPER")
     print("=" * 100)
     print(f"URL: {URL}")
     print(f"Scrape Interval: {SCRAPE_INTERVAL} seconds")
     print(f"Save Location: {BASE_FOLDER}")
-    print(f"Target: 40 courts (Courts 1-20 and 21-40) - Bangalore Bench ONLY")
     print("=" * 100)
     
     # Create folder
@@ -331,14 +316,6 @@ def main():
             
             # Scrape
             courts_data = scrape_display_board(driver)
-            
-            # Validate we got 40 courts
-            if len(courts_data) == 40:
-                print(f"\n   ✓✓✓ Perfect! Extracted exactly 40 courts as expected")
-            elif len(courts_data) < 40:
-                print(f"\n   ⚠ Warning: Only extracted {len(courts_data)} courts (expected 40)")
-            else:
-                print(f"\n   ⚠ Warning: Extracted {len(courts_data)} courts (expected 40)")
             
             # Save to Excel
             if courts_data:
