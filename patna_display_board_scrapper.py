@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 URL = "https://patnahighcourt.gov.in/online_display_board"
 SCRAPE_INTERVAL = 30  # seconds (adjust as needed)
 BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\patna_hc_excels"
-EXCEL_FILE = "PatnaHC_DisplayBoard_Data.xlsx"
+EXCEL_FILE = "PatnaHC_DisplayBoard_Data_2Dec.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================
 

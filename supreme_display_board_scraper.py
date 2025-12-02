@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 URL = "https://wdb.sci.gov.in/display_original.php"
 SCRAPE_INTERVAL = 30  # seconds (set to 60 as per requirement)
 BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\supreme_court_excels"
-EXCEL_FILE = "SC_DisplayBoard_Data.xlsx"
+EXCEL_FILE = "SC_DisplayBoard_Data_2Dec.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================
 

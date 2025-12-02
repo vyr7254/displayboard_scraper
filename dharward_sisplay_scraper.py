@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 URL = "https://judiciary.karnataka.gov.in/display_board_bench.php"
 SCRAPE_INTERVAL = 30  # seconds
 BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\karnataka_hc_excel\dharwad_bench"
-EXCEL_FILE = "dharwad_bench_DisplayBoard_Data.xlsx"
+EXCEL_FILE = "dharwad_bench_DisplayBoard_Data_2Dec.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================
 def setup_driver():
