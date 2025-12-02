@@ -16,8 +16,10 @@ from bs4 import BeautifulSoup
 URL = "https://mphc.gov.in/online-display-board"
 SCRAPE_INTERVAL = 30  # seconds
 BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\madhyapradesh_hc_excels\indore_bench"
-BENCH_VALUE = "02"  # indore bench value
-BACKUP_CYCLE_INTERVAL = 100  # Save to backup file after every 3 cycles
+BENCH_VALUE = "02"  # Indore bench value
+BACKUP_CYCLE_INTERVAL = 60 # Create backup after every 60 cycles (same as Jabalpur)
+SUB_BENCH_NO = "28"  # Sub-bench number for Indore
+BENCH_NAME = "indore"
 
 # ==================== SETUP FUNCTIONS ===================
 def setup_driver():
@@ -41,10 +43,10 @@ def setup_driver():
 def create_folder():
     """
     Create date-based folder structure with bench folder
-    Format: D:\MPHCDisplayBoardScraper\gwalior_bench\madhya_pradesh_jabalpur_YYYY_MM_DD\
+    Format: D:\CourtDisplayBoardScraper\displayboardexcel\madhyapradesh_hc_excels\indore_bench\indore_YYYY_MM_DD\
     """
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"madhya_pradesh_indore_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"indore_{current_date}")
     
     if not os.path.exists(date_folder):
         os.makedirs(date_folder)
@@ -56,71 +58,68 @@ def create_folder():
 def get_date_folder():
     """Get today's date-based folder path"""
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"madhya_pradesh_indore_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"indore_{current_date}")
     return date_folder
 
 
 def get_excel_path(folder):
     """
     Get full path for today's main Excel file
-    Format: madhya_pradesh_jabalpur_YYYY_MM_DD.xlsx
+    Format: indore_YYYY_MM_DD.xlsx
     """
     current_date = datetime.now().strftime("%Y_%m_%d")
-    filename = f"madhya_pradesh_indore_{current_date}.xlsx"
+    filename = f"indore_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
     return excel_path
 
 
-def get_backup_excel_path(folder):
+def get_timestamped_backup_path(folder):
     """
-    Get full path for today's backup Excel file
-    Format: madhya_pradesh_jabalpur_YYYY_MM_DD_backup.xlsx
+    Get full path for timestamped backup Excel file
+    Format: indore_bk_YYYY_MM_DD_HH_MM.xlsx
     """
-    current_date = datetime.now().strftime("%Y_%m_%d")
-    filename = f"madhya_pradesh_indore_{current_date}_backup.xlsx"
+    current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
+    filename = f"indore_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
     return backup_path
 
 
-def save_to_backup(data, backup_path):
+def create_backup_from_main_excel(main_excel_path, folder):
     """
-    Save scraped data to backup Excel file
-    Appends to existing backup file or creates new one
+    Create a timestamped backup file by copying ALL data from the main Excel file
+    This ensures we have a complete snapshot at the time of backup
     """
     try:
-        if not data:
-            print("   ⚠ No data to save to backup")
+        # Check if main Excel file exists
+        if not os.path.exists(main_excel_path):
+            print("   ⚠ Main Excel file does not exist yet. Cannot create backup.")
             return False
         
-        df = pd.DataFrame(data)
-        df = df[["Court No", "Sr. No", "Case No", "Petitioner", "Respondent", "Court Message", "DateTime"]]
+        # Read all data from main Excel file
+        main_df = pd.read_excel(main_excel_path, engine='openpyxl')
         
-        if os.path.exists(backup_path):
-            # Append to existing backup file
-            existing_df = pd.read_excel(backup_path, engine='openpyxl')
-            combined_df = pd.concat([existing_df, df], ignore_index=True)
-            combined_df.to_excel(backup_path, index=False, sheet_name='Sheet1', engine='openpyxl')
-            
-            print(f"\n{'='*100}")
-            print(f"✓✓✓ BACKUP UPDATED ✓✓✓")
-            print(f"   Backup file: {os.path.basename(backup_path)}")
-            print(f"   Added: {len(df)} courts")
-            print(f"   Total rows in backup: {len(combined_df)}")
-            print(f"{'='*100}\n")
-        else:
-            # Create new backup file
-            df.to_excel(backup_path, index=False, sheet_name='Sheet1', engine='openpyxl')
-            
-            print(f"\n{'='*100}")
-            print(f"✓✓✓ BACKUP FILE CREATED ✓✓✓")
-            print(f"   Backup file: {os.path.basename(backup_path)}")
-            print(f"   Initial data: {len(df)} courts")
-            print(f"{'='*100}\n")
+        if main_df.empty:
+            print("   ⚠ Main Excel file is empty. No backup created.")
+            return False
+        
+        # Generate timestamped backup path
+        backup_path = get_timestamped_backup_path(folder)
+        
+        # Save complete data to new backup file
+        main_df.to_excel(backup_path, index=False, sheet_name='Sheet1', engine='openpyxl')
+        
+        print(f"\n{'='*100}")
+        print(f"✓✓✓ TIMESTAMPED BACKUP CREATED ✓✓✓")
+        print(f"   Backup file: {os.path.basename(backup_path)}")
+        print(f"   Total rows backed up: {len(main_df)}")
+        print(f"   Source: {os.path.basename(main_excel_path)}")
+        print(f"   Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{'='*100}\n")
         
         return True
         
     except Exception as e:
-        print(f"   ✗ Error saving to backup: {str(e)}")
+        print(f"   ✗ Error creating timestamped backup: {str(e)}")
         import traceback
         traceback.print_exc()
         return False
@@ -176,20 +175,20 @@ def extract_court_number(cell):
 # ==================== SCRAPING FUNCTIONS ====================
 
 def select_bench(driver):
-    """Select Jabalpur bench from dropdown"""
+    """Select Indore bench from dropdown"""
     try:
-        print("   → Selecting Jabalpur bench from dropdown...")
+        print("   → Selecting Indore bench from dropdown...")
         
         # Wait for dropdown to be present
         dropdown = WebDriverWait(driver, 15).until(
             EC.presence_of_element_located((By.ID, "my_city"))
         )
         
-        # Select Jabalpur (value = "01")
+        # Select Indore (value = "02")
         select = Select(dropdown)
         select.select_by_value(BENCH_VALUE)
         
-        print("   ✓ Jabalpur bench selected")
+        print("   ✓ Indore bench selected")
         
         # Wait for page to reload with new data
         time.sleep(5)
@@ -202,7 +201,7 @@ def select_bench(driver):
 
 def scrape_display_board(driver):
     """
-    Scrape courts from Madhya Pradesh High Court - JABALPUR BENCH
+    Scrape courts from Madhya Pradesh High Court - INDORE BENCH
     Columns: Court No. | Sr. No. | Case. No. | Petitioner | Respondent | Court Message
     """
     try:
@@ -214,7 +213,7 @@ def scrape_display_board(driver):
             EC.presence_of_element_located((By.ID, "my_city"))
         )
         
-        # Select Jabalpur bench
+        # Select Indore bench
         if not select_bench(driver):
             return []
         
@@ -228,7 +227,7 @@ def scrape_display_board(driver):
         scrape_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         print("\n" + "="*100)
-        print("EXTRACTING JABALPUR BENCH COURTS...")
+        print("EXTRACTING INDORE BENCH COURTS...")
         print("="*100)
         
         all_courts_data = []
@@ -294,6 +293,8 @@ def scrape_display_board(driver):
                         
                         # Create court data dictionary
                         court_data = {
+                            "Bench Name": BENCH_NAME,
+                            "SubBenchNo": SUB_BENCH_NO,
                             "Court No": court_no if court_no else "",
                             "Sr. No": sr_no if sr_no else "",
                             "Case No": case_no if case_no else "",
@@ -321,7 +322,7 @@ def scrape_display_board(driver):
         print(f"   ✓ Timestamp: {scrape_time}")
         
         if all_courts_data:
-            print(f"\n   All extracted courts from Jabalpur Bench:")
+            print(f"\n   All extracted courts from Indore Bench:")
             for i, court in enumerate(all_courts_data, 1):
                 print(f"      {i}. Court {court['Court No']} | Sr {court['Sr. No']} | {court['Case No']}")
         
@@ -346,7 +347,7 @@ def save_to_excel(data, file_path, open_file=False):
             return False
         
         df = pd.DataFrame(data)
-        df = df[["Court No", "Sr. No", "Case No", "Petitioner", "Respondent", "Court Message", "DateTime"]]
+        df = df[["Bench Name","SubBenchNo", "Court No", "Sr. No", "Case No", "Petitioner", "Respondent", "Court Message", "DateTime"]]
         
         if os.path.exists(file_path):
             existing_df = pd.read_excel(file_path, engine='openpyxl')
@@ -379,30 +380,33 @@ def save_to_excel(data, file_path, open_file=False):
 def main():
     """Main execution"""
     print("=" * 100)
-    print(" " * 20 + "MADHYA PRADESH HIGH COURT - indore BENCH DISPLAY BOARD SCRAPER")
-    print(" " * 35 + "WITH SINGLE BACKUP FILE PER DAY")
+    print(" " * 20 + "MADHYA PRADESH HIGH COURT - INDORE BENCH DISPLAY BOARD SCRAPER")
+    print(" " * 30 + "WITH TIMESTAMPED BACKUP FILES EVERY 60 CYCLES")
     print("=" * 100)
     print(f"URL: {URL}")
     print(f"Scrape Interval: {SCRAPE_INTERVAL} seconds")
     print(f"Base Location: {BASE_FOLDER}")
     print(f"Backup Interval: Every {BACKUP_CYCLE_INTERVAL} cycles")
-    print(f"Target: gwalior Bench ONLY")
+    print(f"Target: Indore Bench ONLY")
     print(f"Folder Structure:")
-    print(f"   D:\\MPHCDisplayBoardScraper\\")
+    print(f"   D:\\CourtDisplayBoardScraper\\displayboardexcel\\madhyapradesh_hc_excels\\")
     print(f"   └── indore_bench\\")
-    print(f"       └── madhya_pradesh_indore_YYYY_MM_DD\\")
-    print(f"           ├── madhya_pradesh_indore_YYYY_MM_DD.xlsx (main file)")
-    print(f"           └── madhya_pradesh_indore_YYYY_MM_DD_backup.xlsx (backup file)")
+    print(f"       └── indore_YYYY_MM_DD\\")
+    print(f"           ├── indore_YYYY_MM_DD.xlsx (main file)")
+    print(f"           ├── indore_bk_YYYY_MM_DD_HH_MM.xlsx (backup after 60 cycles)")
+    print(f"           ├── indore_bk_YYYY_MM_DD_HH_MM.xlsx (backup after 120 cycles)")
+    print(f"           └── indore_bk_YYYY_MM_DD_HH_MM.xlsx (backup after 180 cycles)")
+    print(f"           etc...")
+    print(f"SubBench Number: {SUB_BENCH_NO} (applied to all records)")
+    print(f"Bench Name: {BENCH_NAME} (applied to all records)")
     print("=" * 100)
     
     # Get today's folder and file paths
     date_folder = create_folder()
     excel_path = get_excel_path(date_folder)
-    backup_path = get_backup_excel_path(date_folder)
     
     print(f"✓ Today's folder: {os.path.basename(date_folder)}")
     print(f"✓ Main Excel file: {os.path.basename(excel_path)}")
-    print(f"✓ Backup Excel file: {os.path.basename(backup_path)}")
     print("=" * 100)
     
     print("\nInitializing Chrome driver...")
@@ -413,7 +417,6 @@ def main():
     cycle_count = 0
     first_cycle = True
     last_backup_cycle = 0
-    pending_backup_data = []  # Store data from cycles waiting to be backed up
     
     try:
         while True:
@@ -432,19 +435,16 @@ def main():
                 # Create new folder and update paths
                 date_folder = create_folder()
                 excel_path = get_excel_path(date_folder)
-                backup_path = get_backup_excel_path(date_folder)
                 first_cycle = True
                 last_backup_cycle = 0
-                pending_backup_data = []  # Reset pending backup data for new day
+                cycle_count = 1  # Reset cycle count for new day
                 
                 print(f"✓ New main file: {os.path.basename(excel_path)}")
-                print(f"✓ New backup file: {os.path.basename(backup_path)}")
             
             print(f"\n{'='*100}")
             print(f"CYCLE {cycle_count} - {current_time}")
             print(f"Folder: {os.path.basename(date_folder)}")
             print(f"Main Excel: {os.path.basename(excel_path)}")
-            print(f"Backup Excel: {os.path.basename(backup_path)}")
             print(f"{'='*100}")
             
             courts_data = scrape_display_board(driver)
@@ -456,43 +456,44 @@ def main():
                 if success:
                     print(f"\n{'='*100}")
                     print(f"✓✓✓ CYCLE {cycle_count} COMPLETED SUCCESSFULLY ✓✓✓")
-                    print(f"   Extracted {len(courts_data)} courts from Jabalpur Bench")
+                    print(f"   Extracted {len(courts_data)} courts from Indore Bench")
                     print(f"{'='*100}")
                     first_cycle = False
                     
-                    # Add current cycle data to pending backup
-                    pending_backup_data.extend(courts_data)
-                    
-                    # Check if backup is needed (every 3 cycles)
+                    # Check if backup is needed (every 60 cycles)
                     if cycle_count - last_backup_cycle >= BACKUP_CYCLE_INTERVAL:
                         print(f"\n{'─'*100}")
                         print(f"⏰ BACKUP TIME - {BACKUP_CYCLE_INTERVAL} cycles completed")
-                        print(f"   Accumulated data from {len(pending_backup_data)} total records")
+                        print(f"   Creating timestamped backup from main Excel file")
                         print(f"{'─'*100}")
-                        backup_success = save_to_backup(pending_backup_data, backup_path)
+                        
+                        backup_success = create_backup_from_main_excel(excel_path, date_folder)
+                        
                         if backup_success:
                             last_backup_cycle = cycle_count
-                            pending_backup_data = []  # Clear pending data after successful backup
+                            print(f"   ✓ Backup created successfully")
+                            print(f"   ✓ This backup contains all data up to cycle {cycle_count}")
                 else:
                     print(f"\n   ⚠ Save failed in cycle {cycle_count}")
             else:
                 print(f"\n   ✗ No data scraped in cycle {cycle_count}")
             
             next_time = datetime.fromtimestamp(time.time() + SCRAPE_INTERVAL).strftime('%Y-%m-%d %H:%M:%S')
+            cycles_until_backup = BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)
+            
             print(f"\n{'─'*100}")
             print(f"⏳ Waiting {SCRAPE_INTERVAL} seconds")
             print(f"   Next cycle: {next_time}")
-            print(f"   Next backup in: {BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)} cycles")
+            print(f"   Next backup in: {cycles_until_backup} cycle(s)")
             print(f"{'─'*100}")
             time.sleep(SCRAPE_INTERVAL)
     
     except KeyboardInterrupt:
         print("\n" + "=" * 100)
         print("⚠ Script stopped by user")
-        print(f"Total cycles: {cycle_count}")
+        print(f"Total cycles completed: {cycle_count}")
         print(f"Final folder: {os.path.basename(date_folder)}")
         print(f"Final main file: {os.path.basename(excel_path)}")
-        print(f"Final backup file: {os.path.basename(backup_path)}")
         print("=" * 100)
     
     except Exception as e:
