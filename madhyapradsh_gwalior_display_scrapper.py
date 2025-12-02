@@ -17,7 +17,7 @@ URL = "https://mphc.gov.in/online-display-board"
 SCRAPE_INTERVAL = 30  # seconds
 BASE_FOLDER = r"D:\MPHCDisplayBoardScraper\gwalior_bench"
 BENCH_VALUE = "03"  # Jabalpur bench value
-BACKUP_CYCLE_INTERVAL = 100  # Save to backup file after every 3 cycles
+BACKUP_CYCLE_INTERVAL = 3  # Save to backup file after every 3 cycles
 
 # ==================== SETUP FUNCTIONS ===================
 def setup_driver():
