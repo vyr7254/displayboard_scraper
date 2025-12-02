@@ -19,8 +19,8 @@ from bs4 import BeautifulSoup
 # ==================== CONFIGURATION ====================
 URL = "http://www.ohcdb.in/"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\orissa_hc_excels"
-EXCEL_FILE = "OrissaHC_DisplayBoard_Data.xlsx"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\orissa_hc_excels"
+EXCEL_FILE = "OrissaHC_DisplayBoard_Data_2Dec.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================
 

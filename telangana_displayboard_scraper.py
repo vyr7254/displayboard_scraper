@@ -20,8 +20,8 @@ from bs4 import BeautifulSoup
 # ==================== CONFIGURATION ====================
 URL = "https://displayboard.tshc.gov.in/hcdbs/displayall"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboard_scraper\db_excels"
-EXCEL_FILE = "TSHC_DisplayBoard_Data.xlsx"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\telangana_hc_excels"
+EXCEL_FILE = "TSHC_DisplayBoard_Data_2December.xlsx"
 
 # ==================== SETUP FUNCTIONS ====================
 

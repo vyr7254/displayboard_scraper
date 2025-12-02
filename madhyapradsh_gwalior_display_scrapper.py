@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 # ==================== CONFIGURATION ====================
 URL = "https://mphc.gov.in/online-display-board"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\MPHCDisplayBoardScraper\gwalior_bench"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\madhyapradesh_hc_excels\gwalior_bench"
 BENCH_VALUE = "03"  # Jabalpur bench value
 BACKUP_CYCLE_INTERVAL = 3  # Save to backup file after every 3 cycles
 
