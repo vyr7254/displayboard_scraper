@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 URL = "https://highcourt.cg.gov.in/hcbspcourtview/court1.php"
 SCRAPE_INTERVAL = 30  # seconds
 BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\chattisgarh_hc_excel"
-BACKUP_CYCLE_INTERVAL = 3  # Create backup after every 60 cycles
+BACKUP_CYCLE_INTERVAL = 60  # Create backup after every 60 cycles
 BENCH_NAME = "Bilaspur"
 SUB_BENCH_NO = "12"
 # ==================== SETUP FUNCTIONS ===================
