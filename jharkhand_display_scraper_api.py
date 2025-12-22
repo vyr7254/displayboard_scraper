@@ -44,30 +44,36 @@ def post_court_data_to_api(court_data):
         if datetime_str:
             try:
                 dt_obj = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
-                date_str = dt_obj.strftime("%Y-%m-%d")
+                date_str = dt_obj.strftime("%d/%m/%Y")  # dd/mm/yyyy format
                 time_str = dt_obj.strftime("%I:%M %p")
             except ValueError:
-                date_str = datetime.now().strftime("%Y-%m-%d")
+                date_str = datetime.now().strftime("%d/%m/%Y")  # dd/mm/yyyy format
                 time_str = datetime.now().strftime("%I:%M %p")
         else:
-            date_str = datetime.now().strftime("%Y-%m-%d")
+            date_str = datetime.now().strftime("%d/%m/%Y")  # dd/mm/yyyy format
             time_str = datetime.now().strftime("%I:%M %p")
         
-        # Convert Sl.No. to integer
+        # Convert Sl.No. to integer - Extract numeric part from formats like "D/73" or "S/56"
         serial_number = court_data.get("Sl.No.", "")
         try:
-            serial_number = int(serial_number) if serial_number else 0
+            if serial_number:
+                # Extract number after "/" if present (e.g., "D/73" -> "73", "S/56" -> "56")
+                if "/" in str(serial_number):
+                    serial_number = str(serial_number).split("/")[-1].strip()
+                # Convert to integer
+                serial_number = int(serial_number)
+            else:
+                serial_number = 0
         except (ValueError, TypeError):
             serial_number = 0
         
         # Prepare API payload with mapped fields
-        # Mapping: benchName:Bench Name, courtHallNumber:Court, caseNumber:Case No., serialNumber:Sl.No.
         payload = {
             "benchName": court_data.get("Bench Name", ""),
             "courtHallNumber": court_data.get("Court", ""),
             "caseNumber": court_data.get("Case No.", ""),
             "serialNumber": serial_number,
-            "date": date_str,
+            "date": date_str,  # dd/mm/yyyy format
             "time": time_str,
             "status": court_data.get("Status", "")
         }
@@ -95,7 +101,6 @@ def post_court_data_to_api(court_data):
         return False, "Connection error"
     except Exception as e:
         return False, f"Error: {str(e)}"
-
 
 def post_all_courts_to_api(courts_data_list):
     """Post all court records to the API"""
