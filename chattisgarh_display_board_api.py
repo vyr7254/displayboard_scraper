@@ -10,6 +10,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
 import platform
 from bs4 import BeautifulSoup
+import requests
+import json
 
 # ==================== CONFIGURATION ====================
 URL = "https://highcourt.cg.gov.in/hcbspcourtview/court1.php"
@@ -18,7 +20,136 @@ BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\chattisgarh_hc_exc
 BACKUP_CYCLE_INTERVAL = 60  # Create backup after every 60 cycles
 BENCH_NAME = "Bilaspur"
 SUB_BENCH_NO = "12"
-# ==================== SETUP FUNCTIONS ===================
+
+# API Configuration
+API_URL = "https://api.courtlivestream.com/api/display-boards/create"
+API_TIMEOUT = 10  # seconds
+ENABLE_API_POSTING = True  # Set to False to disable API posting
+ENABLE_EXCEL_SAVING = True  # Set to False to disable Excel saving
+
+# ==================== API FUNCTIONS ====================
+
+def post_court_data_to_api(court_data):
+    """Post a single court record to the API"""
+    try:
+        # Extract date and time from DateTime field
+        datetime_str = court_data.get("DateTime", "")
+        
+        if datetime_str:
+            try:
+                dt_obj = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
+                date_str = dt_obj.strftime("%Y-%m-%d")
+                time_str = dt_obj.strftime("%I:%M %p")
+            except ValueError:
+                date_str = datetime.now().strftime("%Y-%m-%d")
+                time_str = datetime.now().strftime("%I:%M %p")
+        else:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            time_str = datetime.now().strftime("%I:%M %p")
+        
+        # Convert Sl. No to integer
+        serial_number = court_data.get("Sl. No.", "")
+        try:
+            serial_number = int(serial_number) if serial_number else 0
+        except (ValueError, TypeError):
+            serial_number = 0
+        
+        # Prepare API payload with mapped fields
+        payload = {
+            "benchName": court_data.get("Bench Name", ""),
+            "courtHallNumber": court_data.get("Court No.", ""),
+            "caseNumber": court_data.get("Case No.", ""),
+            "serialNumber": serial_number,
+            "date": date_str,
+            "time": time_str,
+            "listType": court_data.get("List Type", ""),
+            "party": court_data.get("Party", ""),
+            "purpose": court_data.get("Purpose", "")
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        response = requests.post(
+            API_URL,
+            json=payload,
+            headers=headers,
+            timeout=API_TIMEOUT
+        )
+        
+        if response.status_code in [200, 201]:
+            return True, response.json()
+        else:
+            return False, f"API Error {response.status_code}: {response.text}"
+    
+    except requests.exceptions.Timeout:
+        return False, "Request timeout"
+    except requests.exceptions.ConnectionError:
+        return False, "Connection error"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+
+def post_all_courts_to_api(courts_data_list):
+    """Post all court records to the API"""
+    if not ENABLE_API_POSTING:
+        print("\n   ⚠ API posting is DISABLED in configuration")
+        return {"total": 0, "successful": 0, "failed": 0, "errors": []}
+    
+    total_courts = len(courts_data_list)
+    successful_posts = 0
+    failed_posts = 0
+    errors = []
+    
+    print(f"\n{'='*100}")
+    print(f"POSTING {total_courts} COURT RECORDS TO API")
+    print(f"API URL: {API_URL}")
+    print(f"{'='*100}\n")
+    
+    for idx, court_data in enumerate(courts_data_list, 1):
+        court_no = court_data.get("Court No.", "N/A")
+        case_no = court_data.get("Case No.", "N/A")
+        
+        print(f"   [{idx}/{total_courts}] Court {court_no} (Case: {case_no})...", end=" ")
+        
+        success, response = post_court_data_to_api(court_data)
+        
+        if success:
+            successful_posts += 1
+            print("✓")
+        else:
+            failed_posts += 1
+            print(f"✗ ({response})")
+            errors.append({"court": court_no, "case": case_no, "error": response})
+    
+    print(f"\n{'='*100}")
+    print(f"API POSTING SUMMARY")
+    print(f"{'='*100}")
+    print(f"   Total: {total_courts}")
+    print(f"   ✓ Successful: {successful_posts}")
+    print(f"   ✗ Failed: {failed_posts}")
+    print(f"   Success rate: {(successful_posts/total_courts*100):.1f}%")
+    
+    if errors and len(errors) > 0:
+        print(f"\n   FAILED RECORDS (showing first 5):")
+        for err in errors[:5]:
+            print(f"      - Court {err['court']}: {err['error']}")
+        if len(errors) > 5:
+            print(f"      ... and {len(errors)-5} more errors")
+    
+    print(f"{'='*100}\n")
+    
+    return {
+        "total": total_courts,
+        "successful": successful_posts,
+        "failed": failed_posts,
+        "errors": errors
+    }
+
+
+# ==================== SETUP FUNCTIONS ====================
 def setup_driver():
     """Initialize Chrome driver with VISIBLE browser"""
     from selenium.webdriver.chrome.service import Service
@@ -42,6 +173,9 @@ def create_folder():
     Create date-based folder structure
     Format: D:\CourtDisplayBoardScraper\displayboardexcel\chattisgarh_hc_excel\chattisgarh_hc_YYYY_MM_DD\
     """
+    if not ENABLE_EXCEL_SAVING:
+        return None
+        
     current_date = datetime.now().strftime("%Y_%m_%d")
     date_folder = os.path.join(BASE_FOLDER, f"chattisgarh_hc_{current_date}")
     
@@ -64,6 +198,8 @@ def get_excel_path(folder):
     Get full path for today's main Excel file
     Format: chattisgarh_hc_YYYY_MM_DD.xlsx
     """
+    if not folder:
+        return None
     current_date = datetime.now().strftime("%Y_%m_%d")
     filename = f"chattisgarh_hc_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
@@ -75,6 +211,8 @@ def get_timestamped_backup_path(folder):
     Get full path for timestamped backup Excel file
     Format: chattisgarh_hc_bk_YYYY_MM_DD_HH_MM.xlsx
     """
+    if not folder:
+        return None
     current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
     filename = f"chattisgarh_hc_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
@@ -86,6 +224,9 @@ def create_backup_from_main_excel(main_excel_path, folder):
     Create a timestamped backup file by copying ALL data from the main Excel file
     This ensures we have a complete snapshot at the time of backup
     """
+    if not ENABLE_EXCEL_SAVING or not main_excel_path or not folder:
+        return False
+        
     try:
         # Check if main Excel file exists
         if not os.path.exists(main_excel_path):
@@ -289,6 +430,10 @@ def scrape_display_board(driver):
 
 def save_to_excel(data, file_path, open_file=False):
     """Save scraped data to main Excel file"""
+    if not ENABLE_EXCEL_SAVING or not file_path:
+        print("\n   ⚠ Excel saving is DISABLED in configuration")
+        return False
+        
     try:
         if not data:
             print("   ⚠ No data to save")
@@ -329,31 +474,28 @@ def main():
     """Main execution"""
     print("=" * 100)
     print(" " * 25 + "CHHATTISGARH HIGH COURT DISPLAY BOARD SCRAPER")
-    print(" " * 30 + "WITH TIMESTAMPED BACKUP FILES EVERY 60 CYCLES")
+    print(" " * 25 + "WITH EXCEL BACKUP + API INTEGRATION")
     print("=" * 100)
     print(f"URL: {URL}")
     print(f"Scrape Interval: {SCRAPE_INTERVAL} seconds")
-    print(f"Base Location: {BASE_FOLDER}")
-    print(f"Backup Interval: Every {BACKUP_CYCLE_INTERVAL} cycles")
-    print(f"Folder Structure:")
-    print(f"   D:\\CourtDisplayBoardScraper\\displayboardexcel\\")
-    print(f"   └── chattisgarh_hc_excel\\")
-    print(f"       └── chattisgarh_hc_YYYY_MM_DD\\")
-    print(f"           ├── chattisgarh_hc_YYYY_MM_DD.xlsx (main file)")
-    print(f"           ├── chattisgarh_hc_bk_YYYY_MM_DD_HH_MM.xlsx (backup after 60 cycles)")
-    print(f"           ├── chattisgarh_hc_bk_YYYY_MM_DD_HH_MM.xlsx (backup after 120 cycles)")
-    print(f"           └── chattisgarh_hc_bk_YYYY_MM_DD_HH_MM.xlsx (backup after 180 cycles)")
-    print(f"           etc...")
+    print(f"Excel Saving: {'ENABLED' if ENABLE_EXCEL_SAVING else 'DISABLED'}")
+    if ENABLE_EXCEL_SAVING:
+        print(f"Base Location: {BASE_FOLDER}")
+        print(f"Backup Interval: Every {BACKUP_CYCLE_INTERVAL} cycles")
+    print(f"API Posting: {'ENABLED' if ENABLE_API_POSTING else 'DISABLED'}")
+    if ENABLE_API_POSTING:
+        print(f"API URL: {API_URL}")
     print(f"Court Name: {BENCH_NAME} (applied to all records)")
     print(f"Sub Bench No: {SUB_BENCH_NO} (applied to all records)")
     print("=" * 100)
     
     # Get today's folder and file paths
     date_folder = create_folder()
-    excel_path = get_excel_path(date_folder)
+    excel_path = get_excel_path(date_folder) if date_folder else None
     
-    print(f"✓ Today's folder: {os.path.basename(date_folder)}")
-    print(f"✓ Main Excel file: {os.path.basename(excel_path)}")
+    if ENABLE_EXCEL_SAVING and excel_path:
+        print(f"✓ Today's folder: {os.path.basename(date_folder)}")
+        print(f"✓ Main Excel file: {os.path.basename(excel_path)}")
     print("=" * 100)
     
     print("\nInitializing Chrome driver...")
@@ -370,45 +512,64 @@ def main():
             cycle_count += 1
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
-            # Check if date has changed (new day started)
-            current_date_folder = get_date_folder()
-            if current_date_folder != date_folder:
-                print(f"\n{'='*100}")
-                print(f"📅 DATE CHANGED - NEW DAY STARTED")
-                print(f"   Old folder: {os.path.basename(date_folder)}")
-                print(f"   New folder: {os.path.basename(current_date_folder)}")
-                print(f"{'='*100}\n")
-                
-                # Create new folder and update paths
-                date_folder = create_folder()
-                excel_path = get_excel_path(date_folder)
-                first_cycle = True
-                last_backup_cycle = 0
-                cycle_count = 1  # Reset cycle count for new day
-                
-                print(f"✓ New main file: {os.path.basename(excel_path)}")
+            # Check if date has changed (new day started) - only if Excel is enabled
+            if ENABLE_EXCEL_SAVING and date_folder:
+                current_date_folder = get_date_folder()
+                if current_date_folder != date_folder:
+                    print(f"\n{'='*100}")
+                    print(f"📅 DATE CHANGED - NEW DAY STARTED")
+                    print(f"   Old folder: {os.path.basename(date_folder)}")
+                    print(f"   New folder: {os.path.basename(current_date_folder)}")
+                    print(f"{'='*100}\n")
+                    
+                    # Create new folder and update paths
+                    date_folder = create_folder()
+                    excel_path = get_excel_path(date_folder)
+                    first_cycle = True
+                    last_backup_cycle = 0
+                    cycle_count = 1  # Reset cycle count for new day
+                    
+                    print(f"✓ New main file: {os.path.basename(excel_path)}")
             
             print(f"\n{'='*100}")
             print(f"CYCLE {cycle_count} - {current_time}")
-            print(f"Folder: {os.path.basename(date_folder)}")
-            print(f"Main Excel: {os.path.basename(excel_path)}")
+            if ENABLE_EXCEL_SAVING and excel_path:
+                print(f"Folder: {os.path.basename(date_folder)}")
+                print(f"Main Excel: {os.path.basename(excel_path)}")
             print(f"{'='*100}")
             
             courts_data = scrape_display_board(driver)
             
             if courts_data:
-                # Save to main Excel file
-                success = save_to_excel(courts_data, excel_path, open_file=first_cycle)
+                excel_success = False
+                api_result = None
                 
-                if success:
-                    print(f"\n{'='*100}")
-                    print(f"✓✓✓ CYCLE {cycle_count} COMPLETED SUCCESSFULLY ✓✓✓")
-                    print(f"   Extracted {len(courts_data)} courts from Chhattisgarh HC")
-                    print(f"{'='*100}")
+                # Save to Excel if enabled
+                if ENABLE_EXCEL_SAVING and excel_path:
+                    excel_success = save_to_excel(courts_data, excel_path, open_file=first_cycle)
+                
+                # Post to API if enabled
+                if ENABLE_API_POSTING:
+                    api_result = post_all_courts_to_api(courts_data)
+                
+                print(f"\n{'='*100}")
+                print(f"✓✓✓ CYCLE {cycle_count} COMPLETED ✓✓✓")
+                print(f"   Extracted: {len(courts_data)} courts from Chhattisgarh HC")
+                
+                if ENABLE_EXCEL_SAVING:
+                    status = "SUCCESS" if excel_success else "FAILED"
+                    print(f"   Excel Save: {status}")
+                
+                if ENABLE_API_POSTING and api_result:
+                    print(f"   API Posting: {api_result['successful']}/{api_result['total']} successful")
+                
+                print(f"{'='*100}")
+                
+                if excel_success:
                     first_cycle = False
                     
                     # Check if backup is needed (every 60 cycles)
-                    if cycle_count - last_backup_cycle >= BACKUP_CYCLE_INTERVAL:
+                    if ENABLE_EXCEL_SAVING and cycle_count - last_backup_cycle >= BACKUP_CYCLE_INTERVAL:
                         print(f"\n{'─'*100}")
                         print(f"⏰ BACKUP TIME - {BACKUP_CYCLE_INTERVAL} cycles completed")
                         print(f"   Creating timestamped backup from main Excel file")
@@ -420,18 +581,17 @@ def main():
                             last_backup_cycle = cycle_count
                             print(f"   ✓ Backup created successfully")
                             print(f"   ✓ This backup contains all data up to cycle {cycle_count}")
-                else:
-                    print(f"\n   ⚠ Save failed in cycle {cycle_count}")
             else:
                 print(f"\n   ✗ No data scraped in cycle {cycle_count}")
             
             next_time = datetime.fromtimestamp(time.time() + SCRAPE_INTERVAL).strftime('%Y-%m-%d %H:%M:%S')
-            cycles_until_backup = BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)
             
             print(f"\n{'─'*100}")
             print(f"⏳ Waiting {SCRAPE_INTERVAL} seconds")
             print(f"   Next cycle: {next_time}")
-            print(f"   Next backup in: {cycles_until_backup} cycle(s)")
+            if ENABLE_EXCEL_SAVING:
+                cycles_until_backup = BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)
+                print(f"   Next backup in: {cycles_until_backup} cycle(s)")
             print(f"{'─'*100}")
             time.sleep(SCRAPE_INTERVAL)
     
@@ -439,8 +599,9 @@ def main():
         print("\n" + "=" * 100)
         print("⚠ Script stopped by user")
         print(f"Total cycles completed: {cycle_count}")
-        print(f"Final folder: {os.path.basename(date_folder)}")
-        print(f"Final main file: {os.path.basename(excel_path)}")
+        if ENABLE_EXCEL_SAVING and date_folder and excel_path:
+            print(f"Final folder: {os.path.basename(date_folder)}")
+            print(f"Final main file: {os.path.basename(excel_path)}")
         print("=" * 100)
     
     except Exception as e:
