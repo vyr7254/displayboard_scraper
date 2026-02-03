@@ -2,6 +2,7 @@
 Patna High Court Display Board Scraper
 Extracts court data from Patna HC display board and saves to Excel
 WITH TIMESTAMPED BACKUP FILES EVERY 60 CYCLES + API INTEGRATION
+WITH TIMESTAMPED BACKUP FILES EVERY 60 CYCLES + API INTEGRATION
 """
 
 import time
@@ -16,6 +17,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import pandas as pd
 import platform
 from bs4 import BeautifulSoup
+import requests
+import json
 import requests
 import json
 
@@ -180,6 +183,9 @@ def create_folder():
     if not ENABLE_EXCEL_SAVING:
         return None
         
+    if not ENABLE_EXCEL_SAVING:
+        return None
+        
     current_date = datetime.now().strftime("%Y_%m_%d")
     date_folder = os.path.join(BASE_FOLDER, f"patna_{current_date}")
     
@@ -204,6 +210,8 @@ def get_excel_path(folder):
     """
     if not folder:
         return None
+    if not folder:
+        return None
     current_date = datetime.now().strftime("%Y_%m_%d")
     filename = f"patna_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
@@ -217,6 +225,8 @@ def get_timestamped_backup_path(folder):
     """
     if not folder:
         return None
+    if not folder:
+        return None
     current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
     filename = f"patna_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
@@ -228,6 +238,9 @@ def create_backup_from_main_excel(main_excel_path, folder):
     Create a timestamped backup file by copying ALL data from the main Excel file
     This ensures we have a complete snapshot at the time of backup
     """
+    if not ENABLE_EXCEL_SAVING or not main_excel_path or not folder:
+        return False
+        
     if not ENABLE_EXCEL_SAVING or not main_excel_path or not folder:
         return False
         
@@ -472,6 +485,10 @@ def save_to_excel(data, file_path, open_file=False):
         print("\n   ⚠ Excel saving is DISABLED in configuration")
         return False
         
+    if not ENABLE_EXCEL_SAVING or not file_path:
+        print("\n   ⚠ Excel saving is DISABLED in configuration")
+        return False
+        
     try:
         if not data:
             print("   ⚠ No data to save")
@@ -513,9 +530,17 @@ def main():
     print("=" * 100)
     print(" " * 25 + "PATNA HIGH COURT - PATNA BENCH DISPLAY BOARD SCRAPER")
     print(" " * 25 + "WITH EXCEL BACKUP + API INTEGRATION")
+    print(" " * 25 + "WITH EXCEL BACKUP + API INTEGRATION")
     print("=" * 100)
     print(f"URL: {URL}")
     print(f"Scrape Interval: {SCRAPE_INTERVAL} seconds")
+    print(f"Excel Saving: {'ENABLED' if ENABLE_EXCEL_SAVING else 'DISABLED'}")
+    if ENABLE_EXCEL_SAVING:
+        print(f"Base Location: {BASE_FOLDER}")
+        print(f"Backup Interval: Every {BACKUP_CYCLE_INTERVAL} cycles")
+    print(f"API Posting: {'ENABLED' if ENABLE_API_POSTING else 'DISABLED'}")
+    if ENABLE_API_POSTING:
+        print(f"API URL: {API_URL}")
     print(f"Excel Saving: {'ENABLED' if ENABLE_EXCEL_SAVING else 'DISABLED'}")
     if ENABLE_EXCEL_SAVING:
         print(f"Base Location: {BASE_FOLDER}")
@@ -530,7 +555,11 @@ def main():
     # Get today's folder and file paths
     date_folder = create_folder()
     excel_path = get_excel_path(date_folder) if date_folder else None
+    excel_path = get_excel_path(date_folder) if date_folder else None
     
+    if ENABLE_EXCEL_SAVING and excel_path:
+        print(f"✓ Today's folder: {os.path.basename(date_folder)}")
+        print(f"✓ Main Excel file: {os.path.basename(excel_path)}")
     if ENABLE_EXCEL_SAVING and excel_path:
         print(f"✓ Today's folder: {os.path.basename(date_folder)}")
         print(f"✓ Main Excel file: {os.path.basename(excel_path)}")
@@ -568,9 +597,30 @@ def main():
                     cycle_count = 1  # Reset cycle count for new day
                     
                     print(f"✓ New main file: {os.path.basename(excel_path)}")
+            # Check if date has changed (new day started) - only if Excel is enabled
+            if ENABLE_EXCEL_SAVING and date_folder:
+                current_date_folder = get_date_folder()
+                if current_date_folder != date_folder:
+                    print(f"\n{'='*100}")
+                    print(f"📅 DATE CHANGED - NEW DAY STARTED")
+                    print(f"   Old folder: {os.path.basename(date_folder)}")
+                    print(f"   New folder: {os.path.basename(current_date_folder)}")
+                    print(f"{'='*100}\n")
+                    
+                    # Create new folder and update paths
+                    date_folder = create_folder()
+                    excel_path = get_excel_path(date_folder)
+                    first_cycle = True
+                    last_backup_cycle = 0
+                    cycle_count = 1  # Reset cycle count for new day
+                    
+                    print(f"✓ New main file: {os.path.basename(excel_path)}")
             
             print(f"\n{'='*100}")
             print(f"CYCLE {cycle_count} - {current_time}")
+            if ENABLE_EXCEL_SAVING and excel_path:
+                print(f"Folder: {os.path.basename(date_folder)}")
+                print(f"Main Excel: {os.path.basename(excel_path)}")
             if ENABLE_EXCEL_SAVING and excel_path:
                 print(f"Folder: {os.path.basename(date_folder)}")
                 print(f"Main Excel: {os.path.basename(excel_path)}")
@@ -579,6 +629,12 @@ def main():
             courts_data = scrape_display_board(driver)
             
             if courts_data:
+                excel_success = False
+                api_result = None
+                
+                # Save to Excel if enabled
+                if ENABLE_EXCEL_SAVING and excel_path:
+                    excel_success = save_to_excel(courts_data, excel_path, open_file=first_cycle)
                 excel_success = False
                 api_result = None
                 
@@ -604,9 +660,28 @@ def main():
                 print(f"{'='*100}")
                 
                 if excel_success:
+                # Post to API if enabled
+                if ENABLE_API_POSTING:
+                    api_result = post_all_courts_to_api(courts_data)
+                
+                print(f"\n{'='*100}")
+                print(f"✓✓✓ CYCLE {cycle_count} COMPLETED ✓✓✓")
+                print(f"   Extracted: {len(courts_data)} courts from Patna Bench")
+                
+                if ENABLE_EXCEL_SAVING:
+                    status = "SUCCESS" if excel_success else "FAILED"
+                    print(f"   Excel Save: {status}")
+                
+                if ENABLE_API_POSTING and api_result:
+                    print(f"   API Posting: {api_result['successful']}/{api_result['total']} successful")
+                
+                print(f"{'='*100}")
+                
+                if excel_success:
                     first_cycle = False
                     
                     # Check if backup is needed (every 60 cycles)
+                    if ENABLE_EXCEL_SAVING and cycle_count - last_backup_cycle >= BACKUP_CYCLE_INTERVAL:
                     if ENABLE_EXCEL_SAVING and cycle_count - last_backup_cycle >= BACKUP_CYCLE_INTERVAL:
                         print(f"\n{'─'*100}")
                         print(f"⏰ BACKUP TIME - {BACKUP_CYCLE_INTERVAL} cycles completed")
@@ -630,6 +705,9 @@ def main():
             if ENABLE_EXCEL_SAVING:
                 cycles_until_backup = BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)
                 print(f"   Next backup in: {cycles_until_backup} cycle(s)")
+            if ENABLE_EXCEL_SAVING:
+                cycles_until_backup = BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)
+                print(f"   Next backup in: {cycles_until_backup} cycle(s)")
             print(f"{'─'*100}")
             time.sleep(SCRAPE_INTERVAL)
     
@@ -637,6 +715,9 @@ def main():
         print("\n" + "=" * 100)
         print("⚠ Script stopped by user")
         print(f"Total cycles completed: {cycle_count}")
+        if ENABLE_EXCEL_SAVING and date_folder and excel_path:
+            print(f"Final folder: {os.path.basename(date_folder)}")
+            print(f"Final main file: {os.path.basename(excel_path)}")
         if ENABLE_EXCEL_SAVING and date_folder and excel_path:
             print(f"Final folder: {os.path.basename(date_folder)}")
             print(f"Final main file: {os.path.basename(excel_path)}")

@@ -24,7 +24,7 @@ BENCH_NAME = "bengaluru"
 # API Configuration
 API_URL = "https://api.courtlivestream.com/api/display-boards/create"
 API_TIMEOUT = 10  # seconds
-ENABLE_API_POSTING = True  # Set to False to disable API posting
+ENABLE_API_POSTING = False  # Set to False to disable API posting
 ENABLE_EXCEL_SAVING = True  # Set to False to disable Excel saving
 
 # ==================== API FUNCTIONS ====================
