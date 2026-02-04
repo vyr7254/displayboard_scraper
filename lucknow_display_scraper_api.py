@@ -16,7 +16,7 @@ import json
 # ==================== CONFIGURATION ====================
 URL = "https://courtview2.allahabadhighcourt.in/courtview/CourtViewLucknow.do"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\allahabad_hc_excel"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\allahabad_hc_excel\lucknow_bench"
 BACKUP_CYCLE_INTERVAL = 60  # Create backup after every 60 cycles
 SUB_BENCH_NO = "2"  # Sub-bench number for Allahabad
 BENCH_NAME = "Lucknow"
@@ -169,7 +169,7 @@ def setup_driver():
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36")
     
     service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=services, options=chrome_options)
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.implicitly_wait(10)
     return driver
 
@@ -183,7 +183,7 @@ def create_folder():
         return None
         
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"allahabad_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"lucknowgood _{current_date}")
     
     if not os.path.exists(date_folder):
         os.makedirs(date_folder)
@@ -195,7 +195,7 @@ def create_folder():
 def get_date_folder():
     """Get today's date-based folder path"""
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"allahabad_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"lucknow_{current_date}")
     return date_folder
 
 
@@ -207,7 +207,7 @@ def get_excel_path(folder):
     if not folder:
         return None
     current_date = datetime.now().strftime("%Y_%m_%d")
-    filename = f"allahabad_{current_date}.xlsx"
+    filename = f"lucknow_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
     return excel_path
 
@@ -220,7 +220,7 @@ def get_timestamped_backup_path(folder):
     if not folder:
         return None
     current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
-    filename = f"allahabad_bk_{current_timestamp}.xlsx"
+    filename = f"lucknow_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
     return backup_path
 
@@ -267,7 +267,7 @@ def open_excel_file(file_path):
     """Open Excel file automatically after first save"""
     try:
         if platform.system() == 'Windows':
-            os.startfile(file_path)
+            os.file(file_path)
             print(f"   ✓ Excel file opened: {file_path}")
     except Exception as e:
         print(f"   ⚠ Could not auto-open Excel: {str(e)}")

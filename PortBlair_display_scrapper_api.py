@@ -28,7 +28,7 @@ import base64
 # ==================== CONFIGURATION ====================
 URL = "https://display.calcuttahighcourt.gov.in/portblair.php"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\calcutta_hc_excel\portblair_hc_detailed_excel"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\portblair_hc_detailed_excel"
 BACKUP_CYCLE_INTERVAL = 60  # Create backup after every 60 cycles
 BENCH_NAME = "Port Blair"
 
@@ -432,7 +432,7 @@ def create_folder():
         return None
         
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"jalpaiguri_hc_detailed_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"portblair_hc_detailed_{current_date}")
     
     if not os.path.exists(date_folder):
         os.makedirs(date_folder)
@@ -444,7 +444,7 @@ def create_folder():
 def get_date_folder():
     """Get today's date-based folder path"""
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"jalpaiguri_hc_detailed_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"portblair_hc_detailed_{current_date}")
     return date_folder
 
 
@@ -453,7 +453,7 @@ def get_excel_path(folder):
     if not folder:
         return None
     current_date = datetime.now().strftime("%Y_%m_%d")
-    filename = f"jalpaiguri_hc_detailed_{current_date}.xlsx"
+    filename = f"portblair_hc_detailed_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
     return excel_path
 
@@ -463,7 +463,7 @@ def get_timestamped_backup_path(folder):
     if not folder:
         return None
     current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
-    filename = f"jalpaiguri_hc_detailed_bk_{current_timestamp}.xlsx"
+    filename = f"portblair_hc_detailed_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
     return backup_path
 
