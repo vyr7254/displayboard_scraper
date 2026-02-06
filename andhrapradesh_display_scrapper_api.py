@@ -1,5 +1,5 @@
 """
-Andhra Pradesh High Court Display Board Scraper
+Andhra Pradesh High Court Display Board Scraper - FIXED VERSION
 With Excel Backup + API Integration
 Extracts ALL courts including Not in session
 Handles dynamically loaded content via JavaScript
@@ -306,38 +306,87 @@ def extract_cell_text(cell):
 
 # ==================== SCRAPING FUNCTIONS ====================
 
+def wait_for_table_to_populate(driver, max_wait=30):
+    """
+    Wait for the JavaScript to populate the table with actual data
+    Returns True if data loaded, False if timeout
+    """
+    print("   → Waiting for JavaScript to populate table with data...")
+    
+    wait_count = 0
+    while wait_count < max_wait:
+        try:
+            # Execute JavaScript to check if tbody has meaningful content
+            has_data = driver.execute_script("""
+                var tbody = document.getElementById('tbody');
+                if (!tbody) return false;
+                
+                var rows = tbody.getElementsByTagName('tr');
+                if (rows.length === 0) return false;
+                
+                // Check if first row has actual court data (not just empty structure)
+                var firstRow = rows[0];
+                var cells = firstRow.getElementsByTagName('td');
+                
+                if (cells.length === 0) return false;
+                
+                // Look for court number link in first cell
+                var firstCell = cells[0];
+                var hasCourtLink = firstCell.innerHTML.includes('getCourtCauseList');
+                
+                return hasCourtLink;
+            """)
+            
+            if has_data:
+                # Get row count for confirmation
+                row_count = driver.execute_script("""
+                    var tbody = document.getElementById('tbody');
+                    return tbody ? tbody.getElementsByTagName('tr').length : 0;
+                """)
+                print(f"   ✓ Table populated with {row_count} rows after {wait_count} seconds")
+                return True
+                
+        except Exception as e:
+            print(f"   Debug: Error checking table: {str(e)}")
+        
+        time.sleep(1)
+        wait_count += 1
+        
+        if wait_count % 5 == 0:
+            print(f"   ⏳ Still waiting... ({wait_count}s elapsed)")
+    
+    print(f"   ✗ Timeout after {max_wait} seconds waiting for table data")
+    return False
+
+
 def scrape_display_board(driver):
     """
     Scrape courts from Andhra Pradesh HC display board
-    Handles dynamically loaded JavaScript content
+    Handles dynamically loaded JavaScript content - IMPROVED VERSION
     """
     try:
         print("   → Loading display board page...")
         driver.get(URL)
         
-        # Wait for table to be present
+        # Wait for table element to exist
         WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.ID, "table1"))
         )
+        print("   ✓ Table element found")
         
-        # Wait for tbody to be populated by JavaScript (wait for at least 2 rows)
-        print("   → Waiting for JavaScript to populate table...")
-        max_wait = 15
-        wait_count = 0
-        while wait_count < max_wait:
-            try:
-                tbody = driver.find_element(By.ID, "tbody")
-                rows = tbody.find_elements(By.TAG_NAME, "tr")
-                if len(rows) > 0:
-                    print(f"   → Table populated with {len(rows)} rows")
-                    break
-            except:
-                pass
-            time.sleep(1)
-            wait_count += 1
+        # Wait for tbody to exist
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_element_located((By.ID, "tbody"))
+        )
+        print("   ✓ Tbody element found")
         
-        # Additional wait to ensure all data is loaded
-        time.sleep(3)
+        # CRITICAL FIX: Wait for JavaScript to actually populate the table
+        if not wait_for_table_to_populate(driver, max_wait=30):
+            print("   ⚠ WARNING: Table may not be fully populated")
+            # Continue anyway to see what we can extract
+        
+        # Additional small wait to ensure rendering is complete
+        time.sleep(2)
         
         scrape_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
@@ -345,11 +394,26 @@ def scrape_display_board(driver):
         print("ANALYZING PAGE STRUCTURE - EXTRACTING ALL COURTS...")
         print("="*100)
         
-        # Get tbody element
+        # Get tbody element and check its content
         tbody = driver.find_element(By.ID, "tbody")
+        
+        # Debug: Print tbody HTML (first 500 chars)
+        tbody_html = tbody.get_attribute('innerHTML')
+        print(f"\n   DEBUG - Tbody HTML preview (first 500 chars):")
+        print(f"   {tbody_html[:500]}...")
+        print()
+        
         rows = tbody.find_elements(By.TAG_NAME, "tr")
         
         print(f"   → Found {len(rows)} data rows in tbody")
+        
+        if len(rows) == 0:
+            print("\n   ✗ ERROR: No rows found in tbody!")
+            print("   This usually means:")
+            print("      1. JavaScript hasn't loaded the data yet (needs more wait time)")
+            print("      2. The website's AJAX endpoint is not responding")
+            print("      3. The website structure has changed")
+            return []
         
         all_courts_data = []
         
@@ -362,7 +426,15 @@ def scrape_display_board(driver):
             cells = row.find_elements(By.TAG_NAME, "td")
             
             if len(cells) < 4:
+                print(f"   Row {row_idx}: Skipped (less than 4 cells: {len(cells)})")
                 continue
+            
+            # Debug first row
+            if row_idx == 1:
+                print(f"\n   DEBUG - First row has {len(cells)} cells")
+                for i, cell in enumerate(cells[:8]):  # Show first 8 cells
+                    print(f"      Cell {i}: {extract_cell_text(cell)[:50]}")
+                print()
             
             # Each row has 4 sets of: Court No, Coram/Status, Item No, Kept Back Cases
             # Some courts have "Not in session" with colspan=3
@@ -373,7 +445,7 @@ def scrape_display_board(driver):
                 try:
                     # Check if this cell has a court number link
                     cell_html = cells[idx].get_attribute('innerHTML')
-                    has_court_link = 'getCourtCauseList.do?court=' in cell_html
+                    has_court_link = 'getCourtCauseList' in cell_html
                     
                     if has_court_link:
                         court_in_row += 1
@@ -387,9 +459,9 @@ def scrape_display_board(driver):
                             next_cell_text = extract_cell_text(cells[idx + 1])
                             
                             if colspan and int(colspan) >= 3:
-                                # This is "Not in session" - 2 cells total
+                                # This is "Not in session" or "Session Started" - 2 cells total
                                 coram = ""
-                                item_no = next_cell_text  # Contains "Not in session"
+                                item_no = next_cell_text  # Contains status message
                                 kept_back = ""
                                 
                                 court_data = {
@@ -433,11 +505,14 @@ def scrape_display_board(driver):
                         idx += 1
                         
                 except Exception as e:
+                    print(f"   Row {row_idx}, Cell {idx}: Error - {str(e)}")
                     idx += 1
                     continue
             
             if court_in_row > 0:
                 print(f"   Row {row_idx}: Extracted {court_in_row} courts")
+            else:
+                print(f"   Row {row_idx}: No courts extracted (may be empty or malformed)")
         
         print(f"\n{'='*100}")
         print(f"EXTRACTION SUMMARY:")
@@ -449,7 +524,14 @@ def scrape_display_board(driver):
         if all_courts_data:
             print(f"\n   Sample of extracted courts (first 5):")
             for i, court in enumerate(all_courts_data[:5], 1):
-                print(f"      {i}. Court {court['Court No']} ({court['Coram']}) - Item: {court['Item No']}")
+                status = court['Item No'] if court['Coram'] == '' else f"{court['Coram']} - {court['Item No']}"
+                print(f"      {i}. Court {court['Court No']}: {status}")
+        else:
+            print(f"\n   ⚠ WARNING: No courts were extracted!")
+            print(f"   Possible issues:")
+            print(f"      - Page structure has changed")
+            print(f"      - JavaScript didn't execute properly")
+            print(f"      - Network/AJAX request failed")
         
         print(f"{'='*100}\n")
         
@@ -509,7 +591,7 @@ def save_to_excel(data, file_path, open_file=False):
 def main():
     """Main execution"""
     print("=" * 100)
-    print(" " * 20 + "ANDHRA PRADESH HIGH COURT DISPLAY BOARD SCRAPER")
+    print(" " * 20 + "ANDHRA PRADESH HIGH COURT DISPLAY BOARD SCRAPER - FIXED")
     print(" " * 25 + "WITH EXCEL BACKUP + API INTEGRATION")
     print("=" * 100)
     print(f"URL: {URL}")
@@ -524,12 +606,11 @@ def main():
         print(f"Authentication: NO TOKEN (as per requirement)")
     print(f"SubBench Number: {SUB_BENCH_NO}")
     print(f"Bench Name: {BENCH_NAME}")
-    print("\nField Mapping (Excel -> API):")
-    print(f"   Bench Name -> benchName")
-    print(f"   Court No -> courtHallNumber (number only)")
-    print(f"   Item No -> serialNumber")
-    print(f"   Kept Back Cases -> passedOverCases")
-    print(f"   DateTime -> date + time")
+    print("\nFIXES APPLIED:")
+    print("   ✓ Enhanced wait for JavaScript-loaded content")
+    print("   ✓ Added table population detection")
+    print("   ✓ Improved debugging output")
+    print("   ✓ Better error handling for dynamic content")
     print("=" * 100)
     
     date_folder = create_folder()
@@ -619,7 +700,11 @@ def main():
                             print(f"   ✓ Backup created successfully")
             else:
                 print(f"\n   ✗ No data scraped in cycle {cycle_count}")
-                print(f"   ℹ The page may still be loading or the table is empty")
+                print(f"   ℹ Possible reasons:")
+                print(f"      - JavaScript content not loading")
+                print(f"      - AJAX endpoint not responding")
+                print(f"      - Network connectivity issues")
+                print(f"      - Website structure changed")
             
             next_time = datetime.fromtimestamp(time.time() + SCRAPE_INTERVAL).strftime('%Y-%m-%d %H:%M:%S')
             
