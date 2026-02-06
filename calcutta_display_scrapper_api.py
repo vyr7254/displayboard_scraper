@@ -29,7 +29,7 @@ URL = "https://display.calcuttahighcourt.gov.in/principal.php"
 SCRAPE_INTERVAL = 30  # seconds
 BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\calcutta_hc_detailed_excel"
 BACKUP_CYCLE_INTERVAL = 60  # Create backup after every 60 cycles
-BENCH_NAME = "Calcutta"
+BENCH_NAME = "Kolkata"
 
 # API Configuration
 API_URL = "https://api.courtlivestream.com/api/display-boards/create"
@@ -504,7 +504,7 @@ def open_excel_file(file_path):
     """Open Excel file automatically"""
     try:
         if platform.system() == 'Windows':
-            os.startfile(file_path)
+            os.file(file_path)
             print(f"   ✓ Excel file opened: {file_path}")
     except Exception as e:
         print(f"   ⚠ Could not auto-open Excel: {str(e)}")
