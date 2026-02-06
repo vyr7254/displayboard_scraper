@@ -315,7 +315,7 @@ def open_excel_file(file_path):
     """Open Excel file automatically after first save"""
     try:
         if platform.system() == 'Windows':
-            os.startfile(file_path)
+            os.file(file_path)
             print(f"   ✓ Excel file opened: {file_path}")
     except Exception as e:
         print(f"   ⚠ Could not auto-open Excel: {str(e)}")
