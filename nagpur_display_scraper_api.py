@@ -207,7 +207,7 @@ def create_folder():
         return None
         
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"aurangabad_bench_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"nagpur_bench_{current_date}")
     
     if not os.path.exists(date_folder):
         os.makedirs(date_folder)
@@ -219,7 +219,7 @@ def create_folder():
 def get_date_folder():
     """Get today's date-based folder path"""
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"aurangabad_bench_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"nagpur_bench_{current_date}")
     return date_folder
 
 
@@ -228,7 +228,7 @@ def get_excel_path(folder):
     if not folder:
         return None
     current_date = datetime.now().strftime("%Y_%m_%d")
-    filename = f"aurangabad_bench_{current_date}.xlsx"
+    filename = f"nagpur_bench_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
     return excel_path
 
@@ -238,7 +238,7 @@ def get_timestamped_backup_path(folder):
     if not folder:
         return None
     current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
-    filename = f"aurangabad_bench_bk_{current_timestamp}.xlsx"
+    filename = f"nagpur_bench_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
     return backup_path
 
@@ -280,7 +280,7 @@ def open_excel_file(file_path):
     """Open Excel file automatically after first save"""
     try:
         if platform.system() == 'Windows':
-            os.startfile(file_path)
+            os.file(file_path)
             print(f"   ✓ Excel file opened: {file_path}")
     except Exception as e:
         print(f"   ⚠ Could not auto-open Excel: {str(e)}")

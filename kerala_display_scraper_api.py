@@ -1,3 +1,17 @@
+"""
+Kerala High Court Display Board Scraper
+Extracts court data from Kerala HC display board and saves to Excel
+WITH TIMESTAMPED BACKUP FILES EVERY 60 CYCLES + API INTEGRATION
+
+Display Board Structure:
+- 9 rows x 8 columns = 36 courts total
+- Each row has 4 courts (2 columns per court)
+- Column pattern: Court No. | Item No. | Court No. | Item No. | ... (repeated 4 times)
+
+EXCEL COLUMNS: Court No., Item Number
+API MAPPING: Court No. -> courtHallNumber, Item Number -> serialNumber
+"""
+
 import time
 import os
 import re
@@ -14,25 +28,33 @@ import requests
 import json
 
 # ==================== CONFIGURATION ====================
-URL = "https://judiciary.karnataka.gov.in/display_board_bench.php"
+URL = "https://ecourt.keralacourts.in/digicourt/Courtdisplay/smarttvdat"
 SCRAPE_INTERVAL = 30  # seconds
-BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\karnataka_hc_excel\bengaluru_bench"
+BASE_FOLDER = r"D:\CourtDisplayBoardScraper\displayboardexcel\kerala_hc_excel"
 BACKUP_CYCLE_INTERVAL = 60  # Create backup after every 60 cycles
-SUB_BENCH_NO = "22"  # Sub-bench number for Bengaluru
-BENCH_NAME = "bengaluru"
+BENCH_NAME = "Kochi"  # Kerala High Court main bench
 
 # API Configuration
 API_URL = "https://api.courtlivestream.com/api/display-boards/create"
 API_TIMEOUT = 10  # seconds
-ENABLE_API_POSTING = False  # Set to False to disable API posting
+ENABLE_API_POSTING = True  # Set to False to disable API posting
 ENABLE_EXCEL_SAVING = True  # Set to False to disable Excel saving
+
+# ==================== HELPER FUNCTIONS ====================
+
+def clean_text(text):
+    """Clean extracted text by removing extra whitespace"""
+    if not text:
+        return ""
+    text = re.sub(r'\s+', ' ', str(text)).strip()
+    return text
+
 
 # ==================== API FUNCTIONS ====================
 
 def post_court_data_to_api(court_data):
     """Post a single court record to the API"""
     try:
-        # Extract date and time from DateTime field
         datetime_str = court_data.get("DateTime", "")
         
         if datetime_str:
@@ -47,29 +69,28 @@ def post_court_data_to_api(court_data):
             date_str = datetime.now().strftime("%Y-%m-%d")
             time_str = datetime.now().strftime("%I:%M %p")
         
-        # Convert Sl. No and List No to integers
-        serial_number = court_data.get("Sl. No", "")
+        # Extract court hall number and serial number
+        court_hall_number = court_data.get("Court No.", "")
+        item_number_str = court_data.get("Item Number", "")
+        
+        # Convert item number to integer
         try:
-            serial_number = int(serial_number) if serial_number else 0
+            if item_number_str and item_number_str != "----":
+                serial_number = int(item_number_str)
+            else:
+                serial_number = 0
         except (ValueError, TypeError):
             serial_number = 0
         
-        list_number = court_data.get("List No", "")
-        try:
-            list_number = int(list_number) if list_number else 0
-        except (ValueError, TypeError):
-            list_number = 0
-        
-        # Prepare API payload
         payload = {
-            "benchName": court_data.get("Bench Name", ""),
-            "courtHallNumber": court_data.get("CH No", ""),
-            "caseNumber": court_data.get("Case No", ""),
+            "benchName": BENCH_NAME,
+            "courtHallNumber": court_hall_number,
+            "caseNumber": "",  # Not available in Kerala HC display board
             "serialNumber": serial_number,
             "date": date_str,
             "time": time_str,
-            "stage": court_data.get("Stage", ""),
-            "listNumber": list_number
+            "stage": "",  # Not available in Kerala HC display board
+            "listNumber": 0  # Not available in Kerala HC display board
         }
         
         headers = {
@@ -111,13 +132,14 @@ def post_all_courts_to_api(courts_data_list):
     print(f"\n{'='*100}")
     print(f"POSTING {total_courts} COURT RECORDS TO API")
     print(f"API URL: {API_URL}")
+    print(f"MAPPING: Court No. -> courtHallNumber | Item Number -> serialNumber")
     print(f"{'='*100}\n")
     
     for idx, court_data in enumerate(courts_data_list, 1):
-        ch_no = court_data.get("CH No", "N/A")
-        case_no = court_data.get("Case No", "N/A")
+        court_no = court_data.get("Court No.", "N/A")
+        item_no = court_data.get("Item Number", "N/A")
         
-        print(f"   [{idx}/{total_courts}] Court {ch_no} (Case: {case_no})...", end=" ")
+        print(f"   [{idx}/{total_courts}] Court {court_no} | Item={item_no}", end=" ")
         
         success, response = post_court_data_to_api(court_data)
         
@@ -127,7 +149,7 @@ def post_all_courts_to_api(courts_data_list):
         else:
             failed_posts += 1
             print(f"✗ ({response})")
-            errors.append({"court": ch_no, "case": case_no, "error": response})
+            errors.append({"court": court_no, "item": item_no, "error": response})
     
     print(f"\n{'='*100}")
     print(f"API POSTING SUMMARY")
@@ -140,7 +162,7 @@ def post_all_courts_to_api(courts_data_list):
     if errors and len(errors) > 0:
         print(f"\n   FAILED RECORDS (showing first 5):")
         for err in errors[:5]:
-            print(f"      - Court {err['court']}: {err['error']}")
+            print(f"      - Court {err['court']} (Item: {err['item']}): {err['error']}")
         if len(errors) > 5:
             print(f"      ... and {len(errors)-5} more errors")
     
@@ -175,15 +197,12 @@ def setup_driver():
 
 
 def create_folder():
-    """
-    Create date-based folder structure with bench folder
-    Format: D:\CourtDisplayBoardScraper\displayboardexcel\karnataka_hc_excel\bengaluru_bench\bengaluru_YYYY_MM_DD\
-    """
+    """Create date-based folder structure"""
     if not ENABLE_EXCEL_SAVING:
         return None
         
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"bengaluru_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"kerala_hc_{current_date}")
     
     if not os.path.exists(date_folder):
         os.makedirs(date_folder)
@@ -195,61 +214,47 @@ def create_folder():
 def get_date_folder():
     """Get today's date-based folder path"""
     current_date = datetime.now().strftime("%Y_%m_%d")
-    date_folder = os.path.join(BASE_FOLDER, f"bengaluru_{current_date}")
+    date_folder = os.path.join(BASE_FOLDER, f"kerala_hc_{current_date}")
     return date_folder
 
 
 def get_excel_path(folder):
-    """
-    Get full path for today's main Excel file
-    Format: bengaluru_YYYY_MM_DD.xlsx
-    """
+    """Get full path for today's main Excel file"""
     if not folder:
         return None
     current_date = datetime.now().strftime("%Y_%m_%d")
-    filename = f"bengaluru_{current_date}.xlsx"
+    filename = f"kerala_hc_{current_date}.xlsx"
     excel_path = os.path.join(folder, filename)
     return excel_path
 
 
 def get_timestamped_backup_path(folder):
-    """
-    Get full path for timestamped backup Excel file
-    Format: bengaluru_bk_YYYY_MM_DD_HH_MM.xlsx
-    """
+    """Get full path for timestamped backup Excel file"""
     if not folder:
         return None
     current_timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M")
-    filename = f"bengaluru_bk_{current_timestamp}.xlsx"
+    filename = f"kerala_hc_bk_{current_timestamp}.xlsx"
     backup_path = os.path.join(folder, filename)
     return backup_path
 
 
 def create_backup_from_main_excel(main_excel_path, folder):
-    """
-    Create a timestamped backup file by copying ALL data from the main Excel file
-    This ensures we have a complete snapshot at the time of backup
-    """
+    """Create a timestamped backup file by copying ALL data from the main Excel file"""
     if not ENABLE_EXCEL_SAVING or not main_excel_path or not folder:
         return False
         
     try:
-        # Check if main Excel file exists
         if not os.path.exists(main_excel_path):
             print("   ⚠ Main Excel file does not exist yet. Cannot create backup.")
             return False
         
-        # Read all data from main Excel file
         main_df = pd.read_excel(main_excel_path, engine='openpyxl')
         
         if main_df.empty:
             print("   ⚠ Main Excel file is empty. No backup created.")
             return False
         
-        # Generate timestamped backup path
         backup_path = get_timestamped_backup_path(folder)
-        
-        # Save complete data to new backup file
         main_df.to_excel(backup_path, index=False, sheet_name='Sheet1', engine='openpyxl')
         
         print(f"\n{'='*100}")
@@ -279,126 +284,107 @@ def open_excel_file(file_path):
         print(f"   ⚠ Could not auto-open Excel: {str(e)}")
 
 
-def extract_cell_text(cell):
-    """Extract visible text from cell, handling nested HTML elements"""
-    try:
-        html_content = cell.get_attribute('innerHTML')
-        soup = BeautifulSoup(html_content, 'html.parser')
-        text = soup.get_text(separator=' ', strip=True)
-        text = re.sub(r'\s+', ' ', text).strip()
-        return text
-    except:
-        return ""
-
-
 # ==================== SCRAPING FUNCTIONS ====================
 
 def scrape_display_board(driver):
     """
-    Scrape courts from Karnataka High Court display board - BANGALORE BENCH ONLY
-    Extracts ONLY the first 2 data tables (courts 1-40)
-    Extracts ALL rows including "No Session", "No Sitting", empty courts
-    Columns: CH No. | List No. | Sl. No. | Case No. | Stage
+    Scrape courts from Kerala High Court display board
+    
+    Table Structure:
+    - 9 rows x 8 columns
+    - Each row contains 4 courts
+    - Column pattern per court: Court No. | Item Number
+    - Total courts: 36 (9 rows x 4 courts per row)
+    
+    Example row structure:
+    | CJ | ---- | 2E | 316 | 4D | 223 | 6E | 307 |
+      ^     ^      ^    ^     ^    ^     ^    ^
+     Court Item  Court Item Court Item Court Item
+       1     1     2    2     3    3     4    4
     """
     try:
         print("   → Loading display board page...")
         driver.get(URL)
         
-        # Wait for page to load
+        # Wait for table to load
         WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.TAG_NAME, "table"))
+            EC.presence_of_element_located((By.CSS_SELECTOR, "table.table.table-bordered"))
         )
-        time.sleep(5)  # Extra wait for dynamic content
+        time.sleep(3)  # Extra wait for dynamic content
         
-        # Get current timestamp
         scrape_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         print("\n" + "="*100)
-        print("ANALYZING PAGE STRUCTURE - EXTRACTING BENGALURU BENCH COURTS (1-40)...")
+        print("ANALYZING PAGE STRUCTURE - EXTRACTING ALL 36 COURTS...")
         print("="*100)
         
-        # Find all tables
-        tables = driver.find_elements(By.TAG_NAME, "table")
-        print(f"   → Found {len(tables)} table(s) on the page")
+        # Find the main table
+        table = driver.find_element(By.CSS_SELECTOR, "table.table.table-bordered")
+        tbody = table.find_element(By.TAG_NAME, "tbody")
+        rows = tbody.find_elements(By.TAG_NAME, "tr")
+        
+        print(f"   → Found {len(rows)} rows in table")
         
         all_courts_data = []
+        court_count = 0
         
-        # Analyze each table to find data tables (those with "CH No." header)
-        data_tables = []
-        for idx, table in enumerate(tables):
+        # Process each row
+        for row_idx, row in enumerate(rows, 1):
             try:
-                # Check if this table has the court data headers
-                rows = table.find_elements(By.TAG_NAME, "tr")
-                if not rows:
+                cells = row.find_elements(By.TAG_NAME, "th")
+                
+                # Skip if not enough cells (should be 8 cells per row)
+                if len(cells) < 8:
+                    print(f"   ⚠ Row {row_idx}: Only {len(cells)} cells, skipping...")
                     continue
-                    
-                header_row = rows[0]
-                header_cells = header_row.find_elements(By.TAG_NAME, "th")
-                if not header_cells:
-                    header_cells = header_row.find_elements(By.TAG_NAME, "td")
                 
-                header_text = " ".join([extract_cell_text(cell) for cell in header_cells])
+                print(f"\n   → Processing Row {row_idx} ({len(cells)} cells):")
                 
-                # Check if this is a data table (contains "CH No.")
-                if "CH No." in header_text or "CH No" in header_text:
-                    data_tables.append((idx, table))
-                    print(f"   ✓ Found data table #{len(data_tables)} at index {idx}")
+                # Extract 4 courts from this row (each court uses 2 cells)
+                for court_idx in range(4):
+                    cell_start = court_idx * 2  # 0, 2, 4, 6
                     
-                    # ONLY take the first 2 data tables (Bangalore Bench)
-                    if len(data_tables) == 2:
-                        break
-            except:
+                    # Get court number and item number
+                    court_no_cell = cells[cell_start]
+                    item_no_cell = cells[cell_start + 1]
+                    
+                    court_no = clean_text(court_no_cell.text)
+                    item_no = clean_text(item_no_cell.text)
+                    
+                    # Skip if court number is empty
+                    if not court_no or court_no == "":
+                        continue
+                    
+                    court_count += 1
+                    
+                    # Create court record
+                    court_data = {
+                        "Court No.": court_no,
+                        "Item Number": item_no,
+                        "DateTime": scrape_time
+                    }
+                    
+                    all_courts_data.append(court_data)
+                    
+                    print(f"      ✓ Court {court_count}: {court_no} -> Item: {item_no}")
+                
+            except Exception as e:
+                print(f"      ✗ Error processing row {row_idx}: {str(e)}")
                 continue
-        
-        print(f"   → Processing first 2 data tables (Bengaluru Bench)")
-        
-        # Process ONLY the first 2 data tables (courts 1-40)
-        for table_num, (table_idx, table) in enumerate(data_tables[:2], 1):
-            print(f"\n{'─'*100}")
-            print(f"PROCESSING BENGALURU BENCH TABLE {table_num} (Table Index: {table_idx})")
-            print(f"{'─'*100}")
-            
-            rows = table.find_elements(By.TAG_NAME, "tr")
-            print(f"   → Found {len(rows)} total rows in Table {table_num}")
-            
-            # Process each row (skip header row) - EXTRACT ALL ROWS
-            for row_idx, row in enumerate(rows[1:], 1):
-                try:
-                    cells = row.find_elements(By.TAG_NAME, "td")
-                    
-                    # Each row should have 5 columns
-                    if len(cells) >= 5:
-                        # Extract data from each column
-                        ch_no = extract_cell_text(cells[0])
-                        list_no = extract_cell_text(cells[1])
-                        sl_no = extract_cell_text(cells[2])
-                        case_no = extract_cell_text(cells[3])
-                        stage = extract_cell_text(cells[4])
-                        
-                        # Create court data dictionary - EXTRACT EVERYTHING
-                        court_data = {
-                            "Bench Name": BENCH_NAME,
-                            "SubBenchNo": SUB_BENCH_NO,
-                            "CH No": ch_no if ch_no else "",
-                            "List No": list_no if list_no else "",
-                            "Sl. No": sl_no if sl_no else "",
-                            "Case No": case_no if case_no else "",
-                            "Stage": stage if stage else "",
-                            "DateTime": scrape_time
-                        }
-                        
-                        all_courts_data.append(court_data)
-                        
-                except Exception as e:
-                    print(f"      ✗ Error processing row {row_idx}: {str(e)}")
-                    continue
         
         print(f"\n{'='*100}")
         print(f"EXTRACTION SUMMARY:")
         print(f"{'='*100}")
         print(f"   ✓ Total courts extracted: {len(all_courts_data)}")
-        print(f"   ✓ Expected: 40 courts (20 per table)")
+        print(f"   ✓ Expected courts: 36 (9 rows × 4 courts)")
         print(f"   ✓ Timestamp: {scrape_time}")
+        
+        if all_courts_data:
+            print(f"\n   Sample extracted data (first 8 courts):")
+            sample_size = min(8, len(all_courts_data))
+            for i, court in enumerate(all_courts_data[:sample_size], 1):
+                print(f"      {i}. Court No: '{court['Court No.']}' | Item: '{court['Item Number']}'")
+        
         print(f"{'='*100}\n")
         
         return all_courts_data
@@ -424,7 +410,7 @@ def save_to_excel(data, file_path, open_file=False):
             return False
         
         df = pd.DataFrame(data)
-        df = df[["Bench Name", "SubBenchNo", "CH No", "List No", "Sl. No", "Case No", "Stage", "DateTime"]]
+        df = df[["Court No.", "Item Number", "DateTime"]]
         
         if os.path.exists(file_path):
             existing_df = pd.read_excel(file_path, engine='openpyxl')
@@ -432,12 +418,12 @@ def save_to_excel(data, file_path, open_file=False):
             combined_df.to_excel(file_path, index=False, sheet_name='Sheet1', engine='openpyxl')
             
             print(f"\n   ✓ Data appended to Excel")
-            print(f"   ✓ Added {len(df)} courts (Total: {len(combined_df)} rows)")
+            print(f"   ✓ Added {len(df)} records (Total: {len(combined_df)} rows)")
             print(f"   ✓ File: {os.path.basename(file_path)}")
         else:
             df.to_excel(file_path, index=False, sheet_name='Sheet1', engine='openpyxl')
             print(f"\n   ✓ New Excel file created")
-            print(f"   ✓ Initial data: {len(df)} courts")
+            print(f"   ✓ Initial data: {len(df)} records")
             print(f"   ✓ File: {os.path.basename(file_path)}")
         
         if open_file:
@@ -457,8 +443,9 @@ def save_to_excel(data, file_path, open_file=False):
 def main():
     """Main execution"""
     print("=" * 100)
-    print(" " * 20 + "KARNATAKA HIGH COURT - BENGALURU BENCH DISPLAY BOARD SCRAPER")
-    print(" " * 25 + "WITH EXCEL BACKUP + API INTEGRATION")
+    print(" " * 25 + "KERALA HIGH COURT DISPLAY BOARD SCRAPER")
+    print(" " * 20 + "WITH EXCEL BACKUP + API INTEGRATION")
+    print(" " * 15 + "API MAPPING: Court No. -> courtHallNumber | Item Number -> serialNumber")
     print("=" * 100)
     print(f"URL: {URL}")
     print(f"Scrape Interval: {SCRAPE_INTERVAL} seconds")
@@ -469,12 +456,12 @@ def main():
     print(f"API Posting: {'ENABLED' if ENABLE_API_POSTING else 'DISABLED'}")
     if ENABLE_API_POSTING:
         print(f"API URL: {API_URL}")
-    print(f"Target: 40 courts (Courts 1-20 and 21-40) - Bengaluru Bench ONLY")
-    print(f"SubBench Number: {SUB_BENCH_NO}")
+        print(f"   Excel 'Court No.' -> API 'courtHallNumber'")
+        print(f"   Excel 'Item Number' -> API 'serialNumber'")
     print(f"Bench Name: {BENCH_NAME}")
+    print(f"Expected Courts per Cycle: 36 (9 rows × 4 courts)")
     print("=" * 100)
     
-    # Get today's folder and file paths
     date_folder = create_folder()
     excel_path = get_excel_path(date_folder) if date_folder else None
     
@@ -497,57 +484,38 @@ def main():
             cycle_count += 1
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
-            # Check if date has changed (new day started) - only if Excel is enabled
             if ENABLE_EXCEL_SAVING and date_folder:
                 current_date_folder = get_date_folder()
                 if current_date_folder != date_folder:
                     print(f"\n{'='*100}")
                     print(f"📅 DATE CHANGED - NEW DAY STARTED")
-                    print(f"   Old folder: {os.path.basename(date_folder)}")
-                    print(f"   New folder: {os.path.basename(current_date_folder)}")
                     print(f"{'='*100}\n")
                     
-                    # Create new folder and update paths
                     date_folder = create_folder()
                     excel_path = get_excel_path(date_folder)
                     first_cycle = True
                     last_backup_cycle = 0
-                    cycle_count = 1  # Reset cycle count for new day
-                    
-                    print(f"✓ New main file: {os.path.basename(excel_path)}")
+                    cycle_count = 1
             
             print(f"\n{'='*100}")
             print(f"CYCLE {cycle_count} - {current_time}")
-            if ENABLE_EXCEL_SAVING and excel_path:
-                print(f"Folder: {os.path.basename(date_folder)}")
-                print(f"Main Excel: {os.path.basename(excel_path)}")
             print(f"{'='*100}")
             
             courts_data = scrape_display_board(driver)
-            
-            # Validate we got 40 courts
-            if len(courts_data) == 40:
-                print(f"\n   ✓✓✓ Perfect! Extracted exactly 40 courts as expected")
-            elif len(courts_data) < 40:
-                print(f"\n   ⚠ Warning: Only extracted {len(courts_data)} courts (expected 40)")
-            else:
-                print(f"\n   ⚠ Warning: Extracted {len(courts_data)} courts (expected 40)")
             
             if courts_data:
                 excel_success = False
                 api_result = None
                 
-                # Save to Excel if enabled
                 if ENABLE_EXCEL_SAVING and excel_path:
                     excel_success = save_to_excel(courts_data, excel_path, open_file=first_cycle)
                 
-                # Post to API if enabled
                 if ENABLE_API_POSTING:
                     api_result = post_all_courts_to_api(courts_data)
                 
                 print(f"\n{'='*100}")
                 print(f"✓✓✓ CYCLE {cycle_count} COMPLETED ✓✓✓")
-                print(f"   Extracted: {len(courts_data)} courts from Bengaluru Bench")
+                print(f"   Extracted: {len(courts_data)} courts (Expected: 36)")
                 
                 if ENABLE_EXCEL_SAVING:
                     status = "SUCCESS" if excel_success else "FAILED"
@@ -561,27 +529,16 @@ def main():
                 if excel_success:
                     first_cycle = False
                     
-                    # Check if backup is needed (every 60 cycles)
                     if ENABLE_EXCEL_SAVING and cycle_count - last_backup_cycle >= BACKUP_CYCLE_INTERVAL:
-                        print(f"\n{'─'*100}")
-                        print(f"⏰ BACKUP TIME - {BACKUP_CYCLE_INTERVAL} cycles completed")
-                        print(f"   Creating timestamped backup from main Excel file")
-                        print(f"{'─'*100}")
-                        
                         backup_success = create_backup_from_main_excel(excel_path, date_folder)
-                        
                         if backup_success:
                             last_backup_cycle = cycle_count
-                            print(f"   ✓ Backup created successfully")
-                            print(f"   ✓ This backup contains all data up to cycle {cycle_count}")
             else:
                 print(f"\n   ✗ No data scraped in cycle {cycle_count}")
             
             next_time = datetime.fromtimestamp(time.time() + SCRAPE_INTERVAL).strftime('%Y-%m-%d %H:%M:%S')
-            
             print(f"\n{'─'*100}")
-            print(f"⏳ Waiting {SCRAPE_INTERVAL} seconds")
-            print(f"   Next cycle: {next_time}")
+            print(f"⏳ Waiting {SCRAPE_INTERVAL} seconds | Next cycle: {next_time}")
             if ENABLE_EXCEL_SAVING:
                 cycles_until_backup = BACKUP_CYCLE_INTERVAL - (cycle_count - last_backup_cycle)
                 print(f"   Next backup in: {cycles_until_backup} cycle(s)")
@@ -592,9 +549,6 @@ def main():
         print("\n" + "=" * 100)
         print("⚠ Script stopped by user")
         print(f"Total cycles completed: {cycle_count}")
-        if ENABLE_EXCEL_SAVING and date_folder and excel_path:
-            print(f"Final folder: {os.path.basename(date_folder)}")
-            print(f"Final main file: {os.path.basename(excel_path)}")
         print("=" * 100)
     
     except Exception as e:

@@ -60,30 +60,12 @@ def post_court_data_to_api(court_data):
         except (ValueError, TypeError):
             serial_number = 0
         
-        # Extract only the numeric part from Case Number
-        # Example: "CR. MISC./78813/2025 (FOR ADMISSION)" -> "78813"
-        case_number_full = court_data.get("Case Number", "")
-        case_number_numeric = ""
-        
-        if case_number_full:
-            # Find all numbers with slashes (e.g., 78813/2025)
-            # Then extract the first number before the slash
-            match = re.search(r'/(\d+)/', case_number_full)
-            if match:
-                case_number_numeric = match.group(1)
-            else:
-                # If pattern doesn't match, try to find any number
-                numbers = re.findall(r'\d+', case_number_full)
-                if numbers:
-                    # Take the largest number (likely the case number)
-                    case_number_numeric = max(numbers, key=len)
-        
         # Prepare API payload with mapped fields
-        # Mapping: benchName:Bench Name, courtHallNumber:Court Number, caseNumber:extracted numeric, serialNumber:Item No
+        # Mapping: benchName:Bench Name, courtHallNumber:Court Number, caseNumber:Case Number, serialNumber:Item No
         payload = {
             "benchName": court_data.get("Bench Name", ""),
             "courtHallNumber": court_data.get("Court Number", ""),
-            "caseNumber": case_number_numeric,
+            "caseNumber": court_data.get("Case Number", ""),
             "serialNumber": serial_number,
             "date": date_str,
             "time": time_str
@@ -171,7 +153,8 @@ def post_all_courts_to_api(courts_data_list):
     }
 
 
-# ==================== SETUP FUNCTIONS ===================
+# ==================== SETUP FUNCTIONS ====================
+
 def setup_driver():
     """Initialize Chrome driver with VISIBLE browser"""
     from selenium.webdriver.chrome.service import Service
